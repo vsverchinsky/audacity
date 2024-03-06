@@ -190,18 +190,17 @@ class FLACExportProcessor final : public ExportProcessor
 public:
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleFormat, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleFormat, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
 private:
 
-   FLAC__StreamMetadataHandle MakeMetadata(AudacityProject *project, const Tags *tags) const;
+   FLAC__StreamMetadataHandle MakeMetadata(const Tags &tags) const;
 };
 
 class ExportFLAC final : public ExportPlugin
@@ -291,19 +290,16 @@ std::unique_ptr<ExportProcessor> ExportFLAC::CreateProcessor(int) const
 
 
 bool FLACExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned numChannels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* tags)
+                                     const TrackList& tracks,
+                                     const Parameters& parameters,
+                                     const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                     double t1, bool selectionOnly,
+                                     double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
    context.numChannels = numChannels;
    context.fName = fName;
-
-   const auto &tracks = TrackList::Get( project );
 
    wxLogNull logNo;            // temporarily disable wxWidgets error messages
 
@@ -324,7 +320,7 @@ bool FLACExportProcessor::Initialize(AudacityProject& project,
    // See note in MakeMetadata() about a bug in libflac++ 1.1.2
    FLAC__StreamMetadataHandle metadata;
    if (success)
-      metadata = MakeMetadata(&project, tags);
+      metadata = MakeMetadata(tags);
 
    if (success && !metadata) {
       // TODO: more precise message
@@ -483,18 +479,14 @@ ExportResult FLACExportProcessor::Process(ExportProcessorDelegate& delegate)
 //      expects that array to be valid until the stream is initialized.
 //
 //      This has been fixed in 1.1.4.
-FLAC__StreamMetadataHandle FLACExportProcessor::MakeMetadata(AudacityProject *project, const Tags *tags) const
+FLAC__StreamMetadataHandle FLACExportProcessor::MakeMetadata(const Tags &tags) const
 {
-   // Retrieve tags if needed
-   if (tags == NULL)
-      tags = &Tags::Get( *project );
-
    auto metadata = FLAC__StreamMetadataHandle(
       ::FLAC__metadata_object_new(FLAC__METADATA_TYPE_VORBIS_COMMENT)
    );
 
    wxString n;
-   for (const auto &pair : tags->GetRange()) {
+   for (const auto &pair : tags.GetRange()) {
       n = pair.first;
       const auto &v = pair.second;
       if (n == TAG_YEAR) {

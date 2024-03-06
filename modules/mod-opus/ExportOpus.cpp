@@ -466,12 +466,11 @@ public:
    ~OpusExportProcessor();
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -620,10 +619,9 @@ OpusExportProcessor::~OpusExportProcessor()
 }
 
 bool OpusExportProcessor::Initialize(
-   AudacityProject& project, const Parameters& parameters,
-   const wxFileNameWrapper& fName, double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+   AudacityProject& project, const TrackList& tracks,
+   const Parameters& parameters, const Tags& tags, const wxFileNameWrapper& fName, double t0,
+   double t1, bool selectionOnly, double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec)
 {
    context.sampleRate = int32_t(sampleRate);
 
@@ -761,12 +759,9 @@ bool OpusExportProcessor::Initialize(
 
    WriteOpusHeader();
 
-   context.metadata = std::make_unique<Tags>(
-      metadata == nullptr ? Tags::Get(project) : *metadata);
+   context.metadata = std::make_unique<Tags>(tags);
 
    WriteTags();
-
-   const auto& tracks = TrackList::Get(project);
 
    context.mixer = ExportPluginHelpers::CreateMixer(
       tracks, selectionOnly, t0, t1, numChannels, context.opus.frameSize, true,

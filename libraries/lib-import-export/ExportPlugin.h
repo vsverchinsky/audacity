@@ -25,6 +25,7 @@ class wxFileName;
 class wxString;
 
 class AudacityProject;
+class TrackList;
 class Tags;
 
 namespace MixerOptions{ class Downmix; }
@@ -101,7 +102,7 @@ public:
    /**
     * @brief Called before start processing.
     *
-    * @param project Processor may access project data, take care to exclude any data race
+    * @param tracks Processor may access project data, take care to exclude any data race
     * @param parameters A format-dependent set of parameters used in exporting
     * @param selectedOnly Set to true if all tracks should be mixed, to false
     * if only the selected tracks should be mixed and exported.
@@ -112,12 +113,11 @@ public:
     * nearest future.
     */
    virtual bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double rate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec = nullptr,
-      const Tags* tags = nullptr) = 0;
+                           const TrackList& tracks,
+                           const Parameters& parameters,
+                           const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                           double t1, bool selectedOnly,
+                           double rate, unsigned channels, MixerOptions::Downmix* mixerSpec = nullptr) = 0;
    
    virtual ExportResult Process(ExportProcessorDelegate& delegate) = 0;
 };

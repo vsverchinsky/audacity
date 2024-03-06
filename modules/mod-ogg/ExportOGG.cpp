@@ -127,17 +127,16 @@ public:
    ~OGGExportProcessor() override;
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
 private:
-   static void FillComment(AudacityProject *project, vorbis_comment *comment, const Tags *metadata);
+   static void FillComment(const TrackList &tracks, vorbis_comment *comment, const Tags &metadata);
 };
 
 class ExportOGG final : public ExportPlugin
@@ -186,18 +185,16 @@ OGGExportProcessor::~OGGExportProcessor()
 
 
 bool OGGExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned numChannels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                    const TrackList& tracks,
+                                    const Parameters& parameters,
+                                    const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                    double t1, bool selectionOnly,
+                                    double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
    context.numChannels = numChannels;
 
-   const auto &tracks = TrackList::Get( project );
    double    quality = ExportPluginHelpers::GetParameterValue(parameters, 0, 5) / 10.0;
 
    wxLogNull logNo;            // temporarily disable wxWidgets error messages
@@ -228,7 +225,7 @@ bool OGGExportProcessor::Initialize(AudacityProject& project,
    }
 
    // Retrieve tags
-   FillComment(&project, &context.comment, metadata);
+   FillComment(tracks, &context.comment, tags);
 
    // Set up packet->stream encoder.  According to encoder example,
    // a random serial number makes it more likely that you can make
@@ -378,16 +375,12 @@ std::unique_ptr<ExportProcessor> ExportOGG::CreateProcessor(int format) const
 }
 
 
-void OGGExportProcessor::FillComment(AudacityProject *project, vorbis_comment *comment, const Tags *metadata)
+void OGGExportProcessor::FillComment(const TrackList &tracks, vorbis_comment *comment, const Tags &metadata)
 {
-   // Retrieve tags from project if not over-ridden
-   if (metadata == NULL)
-      metadata = &Tags::Get( *project );
-
    vorbis_comment_init(comment);
 
    wxString n;
-   for (const auto &pair : metadata->GetRange()) {
+   for (const auto &pair : metadata.GetRange()) {
       n = pair.first;
       const auto &v = pair.second;
       if (n == TAG_YEAR) {

@@ -596,9 +596,9 @@ public:
 
    /// Format initialization
    bool Init(const char *shortname,
-      AudacityProject *project,
+      const TrackList& tracks,
       int sampleRate,
-      const Tags *metadata,
+      const Tags &metadata,
       const ExportProcessor::Parameters& parameters);
 
    /// Encodes audio
@@ -676,12 +676,11 @@ public:
    FFmpegExportProcessor(std::shared_ptr<FFmpegFunctions> ffmpeg, int format);
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -856,9 +855,9 @@ std::unique_ptr<ExportProcessor> ExportFFmpeg::CreateProcessor(int format) const
 
 
 bool FFmpegExporter::Init(const char *shortname,
-                        AudacityProject *project,
+                        const TrackList& tracks,
                         int sampleRate,
-                        const Tags *metadata,
+                        const Tags &metadata,
                         const ExportProcessor::Parameters& parameters)
 {
    if (!mFFmpeg)
@@ -925,9 +924,6 @@ bool FFmpegExporter::Init(const char *shortname,
    if (mEncAudioStream->SetParametersFromContext(*mEncAudioCodecCtx) < 0)
       return false;
 
-   if (metadata == NULL)
-      metadata = &Tags::Get( *project );
-
    // Add metadata BEFORE writing the header.
    // At the moment that works with ffmpeg-git and ffmpeg-0.5 for MP4.
    const auto canmeta = ExportFFmpegOptions::fmts[mSubFormat].canmetadata;
@@ -935,7 +931,7 @@ bool FFmpegExporter::Init(const char *shortname,
    if (canmeta && (canmeta == AV_CANMETA || canmeta <= avfver))
    {
       mSupportsUTF8 = ExportFFmpegOptions::fmts[mSubFormat].canutf8;
-      AddTags(metadata);
+      AddTags(&metadata);
    }
 
    // Write headers to the output file.
@@ -1598,12 +1594,11 @@ FFmpegExportProcessor::FFmpegExportProcessor(std::shared_ptr<FFmpegFunctions> ff
 }
 
 bool FFmpegExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned channels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                       const TrackList& tracks,
+                                       const Parameters& parameters,
+                                       const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                       double t1, bool selectionOnly,
+                                       double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
@@ -1623,7 +1618,6 @@ bool FFmpegExportProcessor::Initialize(AudacityProject& project,
          .Translation());
    }
 
-   const auto &tracks = TrackList::Get( project );
    bool ret = true;
 
    if (adjustedFormatIndex >= FMT_LAST) {
@@ -1637,7 +1631,7 @@ bool FFmpegExportProcessor::Initialize(AudacityProject& project,
 
    context.exporter = std::make_unique<FFmpegExporter>(mFFmpeg, fName, channels, adjustedFormatIndex);
 
-   ret = context.exporter->Init(shortname.mb_str(), &project, static_cast<int>(sampleRate), metadata, parameters);
+   ret = context.exporter->Init(shortname.mb_str(), tracks, static_cast<int>(sampleRate), tags, parameters);
    
    if (!ret) {
       // TODO: more precise message
@@ -1700,11 +1694,6 @@ void AddStringTagANSI(char field[], int size, wxString value)
 
 bool FFmpegExporter::AddTags(const Tags *tags)
 {
-   if (tags == NULL)
-   {
-      return false;
-   }
-
    SetMetadata(tags, "album", TAG_ALBUM);
    SetMetadata(tags, "comment", TAG_COMMENTS);
    SetMetadata(tags, "genre", TAG_GENRE);

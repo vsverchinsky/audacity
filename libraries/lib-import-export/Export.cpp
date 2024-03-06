@@ -23,9 +23,10 @@
 #include "Project.h"
 #include "WaveTrack.h"
 #include "wxFileNameWrapper.h"
-#include "StretchingSequence.h"
+#include "Track.h"
 
 #include "ExportUtils.h"
+#include "Tags.h"
 
 ExportTaskBuilder::ExportTaskBuilder() = default;
 ExportTaskBuilder::~ExportTaskBuilder() = default;
@@ -69,6 +70,12 @@ ExportTaskBuilder& ExportTaskBuilder::SetMixerSpec(MixerOptions::Downmix *mixerS
    return *this;
 }
 
+ExportTaskBuilder& ExportTaskBuilder::SetTracks(std::shared_ptr<TrackList> tracks) noexcept
+{
+   mTracks = std::move(tracks);
+   return *this;
+}
+
 ExportTaskBuilder& ExportTaskBuilder::SetSampleRate(double sampleRate) noexcept
 {
    mSampleRate = sampleRate;
@@ -97,12 +104,13 @@ ExportTask ExportTaskBuilder::Build(AudacityProject& project)
 
    auto processor = mPlugin->CreateProcessor(mFormat);
    if(!processor->Initialize(project,
-      mParameters,
-      mFileName.GetFullPath(),
-      mT0, mT1, mSelectedOnly,
-      mSampleRate, mMixerSpec ? mMixerSpec->GetNumChannels() : mNumChannels,
-      mMixerSpec,
-      mTags))
+                             mTracks ? *mTracks : TrackList::Get(project),
+                             mParameters,
+                             mTags ? *mTags : Tags::Get(project),
+                             mFileName.GetFullPath(),
+                             mT0, mT1, mSelectedOnly,
+                             mSampleRate, mMixerSpec ? mMixerSpec->GetNumChannels() : mNumChannels,
+                             mMixerSpec))
    {
       return ExportTask([](ExportProcessorDelegate&){ return ExportResult::Cancelled; });
    }

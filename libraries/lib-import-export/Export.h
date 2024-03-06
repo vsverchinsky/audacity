@@ -44,6 +44,7 @@ public:
    ExportTaskBuilder& SetTags(const Tags* tags) noexcept;
    ExportTaskBuilder& SetSampleRate(double sampleRate) noexcept;
    ExportTaskBuilder& SetMixerSpec(MixerOptions::Downmix* mixerSpec) noexcept;
+   ExportTaskBuilder& SetTracks(std::shared_ptr<TrackList> tracks) noexcept;
    
    ExportTask Build(AudacityProject& project);
    
@@ -56,6 +57,7 @@ private:
    double mSampleRate{44100};
    ExportProcessor::Parameters mParameters;
    const ExportPlugin* mPlugin{};
+   std::shared_ptr<TrackList> mTracks;
    int mFormat{};
    MixerOptions::Downmix* mMixerSpec{};//Should be const
    const Tags* mTags{};

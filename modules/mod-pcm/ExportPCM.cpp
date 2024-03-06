@@ -415,12 +415,11 @@ public:
    }
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -534,18 +533,15 @@ std::unique_ptr<ExportProcessor> ExportPCM::CreateProcessor(int format) const
 
 
 bool PCMExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned numChannels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                    const TrackList& tracks,
+                                    const Parameters& parameters,
+                                    const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                    double t1, bool selectionOnly,
+                                    double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
    context.fName = fName;
-
-   const auto &tracks = TrackList::Get( project );
 
    // Set a default in case the settings aren't found
    int& sf_format = context.sf_format;
@@ -635,17 +631,14 @@ bool PCMExportProcessor::Initialize(AudacityProject& project,
       if (!sf) {
          throw ExportException(_("Cannot export audio to %s").Format( path ));
       }
-      // Retrieve tags if not given a set
-      if (metadata == NULL)
-         metadata = &Tags::Get( project );
-
+      
       // Install the meta data at the beginning of the file (except for
       // WAV and WAVEX formats)
       if (fileFormat != SF_FORMAT_WAV &&
           fileFormat != SF_FORMAT_WAVEX) {
-         AddStrings(sf, metadata, sf_format);
+         AddStrings(sf, &tags, sf_format);
       }
-      context.metadata = std::make_unique<Tags>(*metadata);
+      context.metadata = std::make_unique<Tags>(tags);
       
       if (sf_subtype_more_than_16_bits(info.format))
          context.format = floatSample;

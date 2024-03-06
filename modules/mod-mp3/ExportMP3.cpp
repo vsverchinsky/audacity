@@ -1610,12 +1610,11 @@ class MP3ExportProcessor final : public ExportProcessor
 
 public:
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -1775,12 +1774,11 @@ bool ExportMP3::CheckFileName(wxFileName & WXUNUSED(filename), int WXUNUSED(form
 }
 
 bool MP3ExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned channels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                    const TrackList& tracks,
+                                    const Parameters& parameters,
+                                    const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                    double t1, bool selectionOnly,
+                                    double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
@@ -1790,7 +1788,6 @@ bool MP3ExportProcessor::Initialize(AudacityProject& project,
 #ifndef DISABLE_DYNAMIC_LOADING_LAME
    wxWindow *parent = FindProjectFrame(&project);
 #endif // DISABLE_DYNAMIC_LOADING_LAME
-   const auto &tracks = TrackList::Get( project );
    auto& exporter = context.exporter;
 
 #ifdef DISABLE_DYNAMIC_LOADING_LAME
@@ -1903,17 +1900,13 @@ bool MP3ExportProcessor::Initialize(AudacityProject& project,
       throw ExportException(_("Unable to initialize MP3 stream"));
    }
 
-   // Put ID3 tags at beginning of file
-   if (metadata == nullptr)
-      metadata = &Tags::Get( project );
-
    // Open file for writing
    if (!context.outFile.Open(fName.GetFullPath(), wxT("w+b"))) {
       throw ExportException(_("Unable to open target file for writing"));
    }
 
    bool endOfFile;
-   context.id3len = AddTags(context.id3buffer, &endOfFile, metadata);
+   context.id3len = AddTags(context.id3buffer, &endOfFile, &tags);
    if (context.id3len && !endOfFile) {
       if (context.id3len > context.outFile.Write(context.id3buffer.get(), context.id3len)) {
          // TODO: more precise message

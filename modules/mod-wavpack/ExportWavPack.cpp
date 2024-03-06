@@ -264,12 +264,11 @@ public:
    ~WavPackExportProcessor();
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -377,12 +376,11 @@ WavPackExportProcessor::~WavPackExportProcessor()
 }
 
 bool WavPackExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned numChannels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                        const TrackList& tracks,
+                                        const Parameters& parameters,
+                                        const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                        double t1, bool selectionOnly,
+                                        double sampleRate, unsigned numChannels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
@@ -397,8 +395,6 @@ bool WavPackExportProcessor::Initialize(AudacityProject& project,
    if (!outWvFile.file->Create(fName.GetFullPath(), true) || !outWvFile.file->IsOpened()) {
       throw ExportException(_("Unable to open target file for writing"));
    }
-   
-   const auto &tracks = TrackList::Get( project );
 
    const auto quality = ExportPluginHelpers::GetParameterValue<int>(
       parameters,
@@ -479,11 +475,7 @@ bool WavPackExportProcessor::Initialize(AudacityProject& project,
       ? XO("Exporting selected audio as WavPack")
       : XO("Exporting the audio as WavPack");
    
-   context.metadata = std::make_unique<Tags>(
-      metadata == nullptr
-         ? Tags::Get( project )
-         : *metadata
-      );
+   context.metadata = std::make_unique<Tags>(tags);
 
    context.mixer = ExportPluginHelpers::CreateMixer(tracks, selectionOnly,
          t0, t1,

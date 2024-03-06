@@ -264,12 +264,11 @@ public:
    ~MP2ExportProcessor() override;
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double sampleRate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -331,12 +330,11 @@ MP2ExportProcessor::~MP2ExportProcessor()
 
 
 bool MP2ExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned channels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                    const TrackList& tracks,
+                                    const Parameters& parameters,
+                                    const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                    double t1, bool selectionOnly,
+                                    double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
@@ -354,7 +352,6 @@ bool MP2ExportProcessor::Initialize(AudacityProject& project,
       : ExportPluginHelpers::GetParameterValue(
          parameters,
          MP2OptionIDBitRateMPEG2, 96);
-   const auto &tracks = TrackList::Get( project );
 
    wxLogNull logNo;             /* temporarily disable wxWidgets error messages */
 
@@ -372,17 +369,13 @@ bool MP2ExportProcessor::Initialize(AudacityProject& project,
       throw ExportException(_("Cannot export MP2 with this sample rate and bit rate"));
    }
 
-   // Put ID3 tags at beginning of file
-   if (metadata == NULL)
-      metadata = &Tags::Get( project );
-
    context.outFile = std::make_unique<FileIO>(fName, FileIO::Output);
    if (!context.outFile->IsOpened()) {
       throw ExportException(_("Unable to open target file for writing"));
    }
    
    bool endOfFile;
-   context.id3len = AddTags(context.id3buffer, &endOfFile, metadata);
+   context.id3len = AddTags(context.id3buffer, &endOfFile, &tags);
    if (context.id3len && !endOfFile) {
       if ( context.outFile->Write(context.id3buffer.get(), context.id3len).GetLastError() ) {
          // TODO: more precise message

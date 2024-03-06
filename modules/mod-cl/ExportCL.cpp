@@ -432,12 +432,11 @@ class CLExportProcessor : public ExportProcessor
 public:
 
    bool Initialize(AudacityProject& project,
-      const Parameters& parameters,
-      const wxFileNameWrapper& filename,
-      double t0, double t1, bool selectedOnly,
-      double rate, unsigned channels,
-      MixerOptions::Downmix* mixerSpec,
-      const Tags* tags) override;
+                   const TrackList& tracks,
+                   const Parameters& parameters,
+                   const Tags& tags, const wxFileNameWrapper& filename, double t0,
+                   double t1, bool selectedOnly,
+                   double rate, unsigned channels, MixerOptions::Downmix* mixerSpec) override;
 
    ExportResult Process(ExportProcessorDelegate& delegate) override;
 
@@ -489,12 +488,11 @@ std::unique_ptr<ExportProcessor> ExportCL::CreateProcessor(int format) const
 }
 
 bool CLExportProcessor::Initialize(AudacityProject& project,
-   const Parameters& parameters,
-   const wxFileNameWrapper& fName,
-   double t0, double t1, bool selectionOnly,
-   double sampleRate, unsigned channels,
-   MixerOptions::Downmix* mixerSpec,
-   const Tags* metadata)
+                                   const TrackList& tracks,
+                                   const Parameters& parameters,
+                                   const Tags& tags, const wxFileNameWrapper& fName, double t0,
+                                   double t1, bool selectionOnly,
+                                   double sampleRate, unsigned channels, MixerOptions::Downmix* mixerSpec)
 {
    context.t0 = t0;
    context.t1 = t1;
@@ -596,11 +594,7 @@ bool CLExportProcessor::Initialize(AudacityProject& project,
    fmt.blockAlign      = wxUINT16_SWAP_ON_BE(fmt.bitsPerSample * fmt.channels / 8);
    fmt.avgBytesPerSec  = wxUINT32_SWAP_ON_BE(fmt.sampleRate * fmt.blockAlign);
 
-   // Retrieve tags if not given a set
-   if (metadata == nullptr) {
-      metadata = &Tags::Get(project);
-   }
-   const auto metachunk = GetMetaChunk(metadata);
+   const auto metachunk = GetMetaChunk(&tags);
 
    if (!metachunk.empty()) {
 
@@ -628,7 +622,6 @@ bool CLExportProcessor::Initialize(AudacityProject& project,
    os->Write(&data, sizeof(data));
 
    // Mix 'em up
-   const auto &tracks = TrackList::Get( project );
    context.mixer = ExportPluginHelpers::CreateMixer(
                             tracks,
                             selectionOnly,
