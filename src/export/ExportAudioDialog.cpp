@@ -41,6 +41,7 @@
 #include "ExportProgressUI.h"
 #include "ImportExport.h"
 #include "WindowAccessible.h"
+#include "effects/EffectManager.h"
 
 #if wxUSE_ACCESSIBILITY
 #include "WindowAccessible.h"
@@ -484,7 +485,19 @@ void ExportAudioDialog::OnExport(wxCommandEvent &event)
    }
    
    auto result = ExportResult::Error;
-   
+
+   std::shared_ptr<TrackList> exportedTracks;
+   if(mExportOptionsPanel->GetChannels() == 1)
+   {
+      for(auto track : TrackList::Get(mProject))
+      {
+         if(track->NChannels() == 1)
+            continue;
+      }
+   }   
+   else
+      exportedTracks = TrackList::Get(mProject).shared_from_this();
+
    if(mRangeSplit->GetValue())
    {
       FilePaths exportedFiles;
@@ -875,6 +888,7 @@ ExportResult ExportAudioDialog::DoExportSplitByLabels(const ExportPlugin& plugin
                                                       FilePaths& exporterFiles)
 {
    auto ok = ExportResult::Success;   // did it work?
+
    /* Go round again and do the exporting (so this run is slow but
     * non-interactive) */
    for(auto& activeSetting : mExportSettings)
@@ -912,19 +926,19 @@ ExportResult ExportAudioDialog::DoExportSplitByTracks(const ExportPlugin& plugin
                                                       const ExportProcessor::Parameters& parameters,
                                                       FilePaths& exporterFiles)
 {
-   auto& tracks = TrackList::Get(mProject);
+   auto tracks = TrackList::Get(mProject).shared_from_this();
    
    bool anySolo =
-      !((tracks.Any<const WaveTrack>() + &WaveTrack::GetSolo).empty());
+      !((tracks->Any<const WaveTrack>() + &WaveTrack::GetSolo).empty());
    
-   auto waveTracks = tracks.Any<WaveTrack>() -
+   auto waveTracks = tracks->Any<WaveTrack>() -
       (anySolo ? &WaveTrack::GetNotSolo : &WaveTrack::GetMute);
 
    auto& selectionState = SelectionState::Get( mProject );
    
    /* Remember which tracks were selected, and set them to deselected */
-   SelectionStateChanger changer{ selectionState, tracks };
-   for (auto tr : tracks.Selected<WaveTrack>())
+   SelectionStateChanger changer{ selectionState, *tracks };
+   for (auto tr : tracks->Selected<WaveTrack>())
       tr->SetSelected(false);
 
    auto ok = ExportResult::Success;
@@ -941,11 +955,20 @@ ExportResult ExportAudioDialog::DoExportSplitByTracks(const ExportPlugin& plugin
       }
 
       /* Select the track */
-      SelectionStateChanger changer2{ selectionState, tracks };
+      SelectionStateChanger changer2{ selectionState, *tracks };
       tr->SetSelected(true);
 
+      TrackListHolder exportedTracks;
+      if(mExportOptionsPanel->GetChannels() == 1 && tr->NChannels() == 2)
+      {
+         exportedTracks = tr->Duplicate();
+         //auto em = EffectManager::Get()
+      }
+      else
+         exportedTracks = tracks;
+
       // Export the data. "channels" are per track.
-      ok = DoExport(plugin, formatIndex, parameters, activeSetting.filename, activeSetting.channels,
+      ok = DoExport(plugin, formatIndex, exportedTracks, parameters, activeSetting.filename, activeSetting.channels,
          activeSetting.t0, activeSetting.t1, true, activeSetting.tags, exporterFiles);
       
       if (ok == ExportResult::Stopped) {
@@ -973,6 +996,7 @@ ExportResult ExportAudioDialog::DoExportSplitByTracks(const ExportPlugin& plugin
 
 ExportResult ExportAudioDialog::DoExport(const ExportPlugin& plugin,
                                          int formatIndex,
+                                         const std::shared_ptr<TrackList>& tracks,
                                          const ExportProcessor::Parameters& parameters,
                                          const wxFileName& filename,
                                          int channels,
@@ -1036,7 +1060,9 @@ ExportResult ExportAudioDialog::DoExport(const ExportPlugin& plugin,
    auto result = ExportResult::Error;
    ExportProgressUI::ExceptionWrappedCall([&]
    {
-      result = ExportProgressUI::Show(ExportTaskBuilder{}.SetPlugin(&plugin, formatIndex)
+      result = ExportProgressUI::Show(ExportTaskBuilder{}
+                                    .SetPlugin(&plugin, formatIndex)
+                                    .SetTracks(tracks)
                                     .SetParameters(parameters)
                                     .SetRange(t0, t1, selectedOnly)
                                     .SetTags(&tags)
@@ -1053,5 +1079,3 @@ ExportResult ExportAudioDialog::DoExport(const ExportPlugin& plugin,
    
    return result;
 }
-
-

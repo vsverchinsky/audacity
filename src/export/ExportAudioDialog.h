@@ -97,6 +97,7 @@ private:
    
    ExportResult DoExport(const ExportPlugin& plugin,
                          int formatIndex,
+                         const std::shared_ptr<TrackList>& tracks,
                          const ExportProcessor::Parameters& parameters,
                          const wxFileName& filename,
                          int channels,
