@@ -74,8 +74,9 @@ bool EffectBase::DoEffect(EffectSettings &settings,
    Finally Do([&]{ SetTracks(nullptr); });
 
    // This is for performance purposes only, no additional recovery implied
-   auto &pProject = *const_cast<AudacityProject*>(FindProject()); // how to remove this const_cast?
-   TransactionScope trans(pProject, "Effect");
+   std::optional<TransactionScope> trans;
+   if(auto pProject = const_cast<AudacityProject*>(FindProject()))// how to remove this const_cast?
+      trans.emplace(*pProject, "Effect");
 
    // Update track/group counts
    CountWaveTracks();
@@ -101,8 +102,8 @@ bool EffectBase::DoEffect(EffectSettings &settings,
          // On failure, restore the old duration setting
          settings.extra.SetDuration(oldDuration);
       }
-      else
-         trans.Commit();
+      else if(trans)
+         trans->Commit();
 
       mPresetNames.clear();
    } );
