@@ -114,6 +114,46 @@ enum {
    EditMetadataID,
 };
 
+using StereoToMono = std::function<void(TrackList&, double, double)>;
+
+StereoToMono MakeStereoToMonoConverter(AudacityProject& project)
+{
+   const auto pluginId = EffectManager::Get().GetEffectByIdentifier(wxT("StereoToMono"));
+   if(pluginId.empty())
+      return {};
+
+   const auto effect = dynamic_cast<Effect*>(EffectManager::Get().GetEffect(pluginId));//could be nullptr
+   if(effect == nullptr)
+      return {};
+
+   const auto defaultSettings = EffectManager::Get().GetDefaultSettings(pluginId);
+   if(defaultSettings == nullptr)
+      return {};
+
+   const auto rate = ProjectRate::Get(project).GetRate();
+
+   const auto access = std::make_shared<SimpleEffectSettingsAccess>(*defaultSettings);
+   return [=](TrackList& tracks, double t0, double t1)
+   {
+      access->ModifySettings([&](EffectSettings& settings) 
+      {
+         NotifyingSelectedRegion selectedRegion;
+         selectedRegion.setTimes(t0, t1);
+         effect->DoEffect(
+            settings,
+            {},
+            rate,
+            &tracks,
+            nullptr,
+            selectedRegion,
+            EffectManager::kNone,
+            access
+         );
+         return nullptr;
+      });
+   };
+}
+
 }
 
 BEGIN_EVENT_TABLE(ExportAudioDialog, wxDialogWrapper)
@@ -488,18 +528,6 @@ void ExportAudioDialog::OnExport(wxCommandEvent &event)
    
    auto result = ExportResult::Error;
 
-   std::shared_ptr<TrackList> exportedTracks;
-   if(mExportOptionsPanel->GetChannels() == 1)
-   {
-      for(auto track : TrackList::Get(mProject))
-      {
-         if(track->NChannels() == 1)
-            continue;
-      }
-   }   
-   else
-      exportedTracks = TrackList::Get(mProject).shared_from_this();
-
    if(mRangeSplit->GetValue())
    {
       FilePaths exportedFiles;
@@ -618,8 +646,25 @@ void ExportAudioDialog::OnExport(wxCommandEvent &event)
          builder.SetMixerSpec(tempMixerSpec.get());
       }
       else
+      {
+         if(channels == 1)
+         {
+            const auto hasStereo = exportedTracks.any_of(
+               [](const WaveTrack* track) { return track->NChannels() == 2; }
+            );
+            if(hasStereo)
+            {
+               auto mixedTracks = TrackList::Create(nullptr);
+               for(auto track : exportedTracks)
+                  mixedTracks->Append(std::move(*track->Duplicate()));
+
+               auto stereoToMono = MakeStereoToMonoConverter(mProject);
+               stereoToMono(*mixedTracks, t0, t1);
+               builder.SetTracks(std::move(mixedTracks));
+            }
+         }
          builder.SetNumChannels(channels);
-      
+      }
       ExportProgressUI::ExceptionWrappedCall([&]
       {
          result = ExportProgressUI::Show(builder.Build(mProject));
@@ -864,43 +909,6 @@ void ExportAudioDialog::UpdateTrackExportSettings(const ExportPlugin& plugin, in
    std::swap(mExportSettings, exportSettings);
 }
 
-auto MakeStereoToMonoConverter(AudacityProject& project)
-{
-   const auto pluginId = EffectManager::Get().GetEffectByIdentifier(wxT("StereoToMono"));
-   if(pluginId.empty())
-      return {};
-
-   const auto effect = dynamic_cast<Effect*>(EffectManager::Get().GetEffect(pluginId));//could be nullptr
-   if(effect == nullptr)
-      return {};
-
-   const auto defaultSettings = EffectManager::Get().GetDefaultSettings(pluginId);
-   if(defaultSettings == nullptr)
-      return {};
-
-   const auto rate = ProjectRate::Get(project).GetRate();
-
-   const auto access = std::make_shared<SimpleEffectSettingsAccess>(*defaultSettings);
-   return [=](TrackList& tracks, double t0, double t1)
-   {
-      access->ModifySettings([=](EffectSettings& settings)
-      {
-         NotifyingSelectedRegion selectedRegion;
-         selectedRegion.setTimes(t0, t1);
-         effect->DoEffect(
-            settings,
-            {},
-            rate,
-            &tracks,
-            nullptr,
-            selectedRegion,
-            EffectManager::kNone,
-            access
-         );
-      });
-   };
-}
-
 ExportResult ExportAudioDialog::DoExportSplitByLabels(const ExportPlugin& plugin,
                                                       int formatIndex,
                                                       const ExportProcessor::Parameters& parameters,
@@ -908,21 +916,22 @@ ExportResult ExportAudioDialog::DoExportSplitByLabels(const ExportPlugin& plugin
 {
    auto ok = ExportResult::Success;   // did it work?
 
-   TrackListHolder exportedTracks;
+   auto tracks = TrackList::Get(mProject).shared_from_this();
+
    if(mExportOptionsPanel->GetChannels() == 1)
    {
-      auto stereoToMono = MakeStereoToMonoConverter(mProject);
-      
-      for(auto track : TrackList::Get(mProject).Any<WaveTrack>())
+      const auto waveTracks = tracks->Any<WaveTrack>();
+      const auto hasStereo = waveTracks.any_of([](const WaveTrack* track) { return track->NChannels() == 2; });
+      if(hasStereo)
       {
-         if(track->NChannels() == 2)
-         {
-            stereoToMono(*track->Duplicate())
-         }
+         tracks = TrackList::Create(nullptr);
+         const auto stereoToMono = MakeStereoToMonoConverter(mProject);
+         for (const auto track : waveTracks)
+            tracks->Append(std::move(*track->Duplicate()));
+         
+         stereoToMono(*tracks, tracks->GetStartTime(), tracks->GetEndTime());
       }
    }
-   if(!exportedTracks)
-      exportedTracks = TrackList::Get(mProject).shared_from_this();
 
    /* Go round again and do the exporting (so this run is slow but
     * non-interactive) */
@@ -934,7 +943,7 @@ ExportResult ExportAudioDialog::DoExportSplitByLabels(const ExportPlugin& plugin
          continue;
 
       // Export it
-      ok = DoExport(plugin, formatIndex, exportedTracks, parameters, activeSetting.filename, activeSetting.channels,
+      ok = DoExport(plugin, formatIndex, tracks, parameters, activeSetting.filename, activeSetting.channels,
          activeSetting.t0, activeSetting.t1, false, activeSetting.tags, exporterFiles);
       
       if (ok == ExportResult::Stopped) {
@@ -996,10 +1005,10 @@ ExportResult ExportAudioDialog::DoExportSplitByTracks(const ExportPlugin& plugin
       tr->SetSelected(true);
 
       TrackListHolder exportedTracks;
-      if(mExportOptionsPanel->GetChannels() == 1 && tr->NChannels() == 2)
+      if(activeSetting.channels == 1 && tr->NChannels() == 2)
       {
          exportedTracks = tr->Duplicate();
-         stereoToMono(exportedTracks, activeSetting.t0, activeSetting.t1);
+         stereoToMono(*exportedTracks, activeSetting.t0, activeSetting.t1);
       }
       else
          exportedTracks = tracks;
